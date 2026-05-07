@@ -389,6 +389,15 @@ void litert_lm_engine_settings_set_max_num_tokens(
         max_num_tokens);
   }
 }
+
+void litert_lm_engine_settings_set_load_model_from_descriptor(
+    LiteRtLmEngineSettings* settings, bool load_model_from_descriptor) {
+  if (settings && settings->settings) {
+    settings->settings->GetMutableMainExecutorSettings().SetLoadModelFromDescriptor(
+        load_model_from_descriptor);
+  }
+}
+
 void litert_lm_engine_settings_set_parallel_file_section_loading(
     LiteRtLmEngineSettings* settings, bool parallel_file_section_loading) {
   if (settings && settings->settings) {

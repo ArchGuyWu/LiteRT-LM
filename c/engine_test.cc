@@ -262,6 +262,30 @@ TEST(EngineCTest, SetEnableSpeculativeDecoding) {
                    .enable_speculative_decoding);
 }
 
+TEST(EngineCTest, SetLoadModelFromDescriptor) {
+  const std::string task_path = "test_model_path_1";
+  EngineSettingsPtr settings(
+      litert_lm_engine_settings_create(task_path.c_str(), "cpu",
+                                       /* vision_backend_str */ nullptr,
+                                       /* audio_backend_str */ nullptr),
+      &litert_lm_engine_settings_delete);
+  ASSERT_NE(settings, nullptr);
+
+  // Default is false
+  EXPECT_FALSE(settings->settings->GetMainExecutorSettings()
+                   .GetLoadModelFromDescriptor());
+
+  litert_lm_engine_settings_set_load_model_from_descriptor(settings.get(),
+                                                           true);
+  EXPECT_TRUE(settings->settings->GetMainExecutorSettings()
+                  .GetLoadModelFromDescriptor());
+
+  litert_lm_engine_settings_set_load_model_from_descriptor(settings.get(),
+                                                           false);
+  EXPECT_FALSE(settings->settings->GetMainExecutorSettings()
+                   .GetLoadModelFromDescriptor());
+}
+
 TEST(EngineCTest, CreateSessionConfigWithSamplerParams) {
   LiteRtLmSamplerParams sampler_params;
   sampler_params.type = kLiteRtLmSamplerTypeTopP;

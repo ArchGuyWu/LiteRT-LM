@@ -262,6 +262,14 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_engine_settings_set_max_num_tokens(
     LiteRtLmEngineSettings* settings, int max_num_tokens);
 
+// Sets whether to load the model from a file descriptor rather than by path.
+//
+// @param settings The engine settings.
+// @param load_model_from_descriptor Whether to load from descriptor.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_load_model_from_descriptor(
+    LiteRtLmEngineSettings* settings, bool load_model_from_descriptor);
+
 // Sets whether the engine should load different sections of the litertlm file
 // in parallel. Defaults to true.
 //

@@ -315,6 +315,13 @@ class LlmExecutorSettings : public ExecutorSettingsBase {
     max_num_tokens_ = max_num_tokens;
   }
 
+  bool GetLoadModelFromDescriptor() const {
+    return load_model_from_descriptor_;
+  }
+  void SetLoadModelFromDescriptor(bool load_model_from_descriptor) {
+    load_model_from_descriptor_ = load_model_from_descriptor;
+  }
+
   uint32_t GetMaxNumImages() const { return max_num_images_; }
   void SetMaxNumImages(uint32_t max_num_images) {
     max_num_images_ = max_num_images;
@@ -378,6 +385,9 @@ class LlmExecutorSettings : public ExecutorSettingsBase {
   // Maximum number of the sum of input and output tokens. It is equivalent to
   // the size of the kv-cache.
   uint32_t max_num_tokens_;
+
+  // Whether to load the model from a file descriptor rather than by path.
+  bool load_model_from_descriptor_ = false;
 
   // Maximum number of images the model can handle.
   uint32_t max_num_images_;
