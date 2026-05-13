@@ -42,6 +42,7 @@
 #include "runtime/proto/sampler_params.pb.h"
 #include "runtime/proto/token.pb.h"
 #include "runtime/util/logging.h"
+#include "runtime/util/scoped_file.h"
 
 namespace {
 
@@ -137,6 +138,7 @@ using ::litert::lm::EngineFactory;
 using ::litert::lm::EngineSettings;
 using ::litert::lm::InputText;
 
+using ::litert::lm::ScopedFile;
 using ::litert::lm::Message;
 using ::litert::lm::ModelAssets;
 using ::litert::lm::Responses;
@@ -146,6 +148,49 @@ using ::litert::lm::proto::SamplerParameters;
 struct LiteRtLmEngineSettings {
   std::unique_ptr<EngineSettings> settings;
 };
+
+static LiteRtLmEngineSettings* CreateEngineSettingsHelper(
+    ModelAssets model_assets, const char* backend_str,
+    const char* vision_backend_str, const char* audio_backend_str) {
+  auto backend = litert::lm::GetBackendFromString(backend_str);
+  if (!backend.ok()) {
+    ABSL_LOG(ERROR) << "Failed to parse backend: " << backend.status();
+    return nullptr;
+  }
+
+  std::optional<litert::lm::Backend> vision_backend;
+  if (vision_backend_str) {
+    auto backend = litert::lm::GetBackendFromString(vision_backend_str);
+    if (!backend.ok()) {
+      ABSL_LOG(ERROR) << "Failed to parse vision backend: " << backend.status();
+      return nullptr;
+    }
+    vision_backend = *backend;
+  }
+
+  std::optional<litert::lm::Backend> audio_backend;
+  if (audio_backend_str) {
+    auto backend = litert::lm::GetBackendFromString(audio_backend_str);
+    if (!backend.ok()) {
+      ABSL_LOG(ERROR) << "Failed to parse audio backend: " << backend.status();
+      return nullptr;
+    }
+    audio_backend = *backend;
+  }
+
+  auto engine_settings = EngineSettings::CreateDefault(
+      std::move(model_assets), *backend, vision_backend, audio_backend);
+  if (!engine_settings.ok()) {
+    ABSL_LOG(ERROR) << "Failed to create engine settings: "
+                    << engine_settings.status();
+    return nullptr;
+  }
+
+  auto* c_settings = new LiteRtLmEngineSettings;
+  c_settings->settings =
+      std::make_unique<EngineSettings>(std::move(*engine_settings));
+  return c_settings;
+}
 
 struct LiteRtLmEngine {
   std::unique_ptr<Engine> engine;
@@ -338,46 +383,36 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
                     << model_assets.status();
     return nullptr;
   }
-  auto backend = litert::lm::GetBackendFromString(backend_str);
-  if (!backend.ok()) {
-    ABSL_LOG(ERROR) << "Failed to parse backend: " << backend.status();
-    return nullptr;
-  }
-
-  std::optional<litert::lm::Backend> vision_backend;
-  if (vision_backend_str) {
-    auto backend = litert::lm::GetBackendFromString(vision_backend_str);
-    if (!backend.ok()) {
-      ABSL_LOG(ERROR) << "Failed to parse vision backend: " << backend.status();
-      return nullptr;
-    }
-    vision_backend = *backend;
-  }
-
-  std::optional<litert::lm::Backend> audio_backend;
-  if (audio_backend_str) {
-    auto backend = litert::lm::GetBackendFromString(audio_backend_str);
-    if (!backend.ok()) {
-      ABSL_LOG(ERROR) << "Failed to parse audio backend: " << backend.status();
-      return nullptr;
-    }
-    audio_backend = *backend;
-  }
-
-  auto engine_settings = EngineSettings::CreateDefault(
-      *std::move(model_assets), *backend, vision_backend, audio_backend);
-  if (!engine_settings.ok()) {
-    ABSL_LOG(ERROR) << "Failed to create engine settings: "
-                    << engine_settings.status();
-    return nullptr;
-  }
-
-  auto* c_settings = new LiteRtLmEngineSettings;
-  c_settings->settings =
-      std::make_unique<EngineSettings>(*std::move(engine_settings));
-  return c_settings;
+  return CreateEngineSettingsHelper(std::move(*model_assets), backend_str,
+                                    vision_backend_str, audio_backend_str);
 }
 
+LiteRtLmEngineSettings* litert_lm_engine_settings_create_from_file_descriptor(
+    const char* model_path, const char* backend_str,
+    const char* vision_backend_str, const char* audio_backend_str) {
+  if (!model_path || model_path[0] == '\0') {
+    return nullptr;
+  }
+  auto scoped_file_or = ScopedFile::Open(model_path);
+  if (!scoped_file_or.ok()) {
+    ABSL_LOG(ERROR) << "Failed to open scoped file: "
+                    << scoped_file_or.status();
+    return nullptr;
+  }
+  auto model_assets_or = ModelAssets::Create(
+      std::make_shared<litert::lm::ScopedFile>(std::move(*scoped_file_or)),
+      model_path);
+  if (!model_assets_or.ok()) {
+    ABSL_LOG(ERROR) << "Failed to create model assets from FD: "
+                    << model_assets_or.status();
+    return nullptr;
+  }
+  ABSL_LOG(INFO) << "LiteRT-LM successfully created EngineSettings directly "
+                    "from File Descriptor for model: "
+                 << model_path;
+  return CreateEngineSettingsHelper(std::move(*model_assets_or), backend_str,
+                                    vision_backend_str, audio_backend_str);
+}
 void litert_lm_engine_settings_delete(LiteRtLmEngineSettings* settings) {
   delete settings;
 }
@@ -389,6 +424,7 @@ void litert_lm_engine_settings_set_max_num_tokens(
         max_num_tokens);
   }
 }
+
 void litert_lm_engine_settings_set_parallel_file_section_loading(
     LiteRtLmEngineSettings* settings, bool parallel_file_section_loading) {
   if (settings && settings->settings) {

@@ -262,6 +262,25 @@ TEST(EngineCTest, SetEnableSpeculativeDecoding) {
                    .enable_speculative_decoding);
 }
 
+TEST(EngineCTest, CreateSettingsFromFileDescriptor) {
+  const std::string task_path = GetTestdataPath(
+      "litert_lm/runtime/testdata/test_lm_new_metadata.task");
+  EngineSettingsPtr settings(
+      litert_lm_engine_settings_create_from_file_descriptor(
+          task_path.c_str(), "cpu", /* vision_backend_str */ nullptr,
+          /* audio_backend_str */ nullptr),
+      &litert_lm_engine_settings_delete);
+  ASSERT_NE(settings, nullptr);
+  EXPECT_TRUE(settings->settings->GetMainExecutorSettings()
+                  .GetModelAssets()
+                  .HasScopedFile());
+  EXPECT_EQ(settings->settings->GetMainExecutorSettings()
+                .GetModelAssets()
+                .GetPath()
+                .value_or(""),
+            task_path);
+}
+
 TEST(EngineCTest, CreateSessionConfigWithSamplerParams) {
   LiteRtLmSamplerParams sampler_params;
   sampler_params.type = kLiteRtLmSamplerTypeTopP;
