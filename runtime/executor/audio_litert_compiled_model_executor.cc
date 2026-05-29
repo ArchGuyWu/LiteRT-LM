@@ -254,7 +254,7 @@ AudioLiteRtCompiledModelExecutor::AudioStaticEncoder::Initialize() {
         /*check_and_clean=*/true);
     auto weight_cache_file = executor_settings_.GetWeightCacheFile(
         absl::StrCat(AudioExecutorSettings::kStaticEncoderName,
-                     ExecutorSettingsBase::kMlDriftCacheSuffix),
+                     ExecutorSettingsBase::kMlDriftWeightCacheSuffix),
         /*check_and_clean=*/true);
     RETURN_IF_ERROR(SetGpuOptions(executor_settings_, gpu_options));
     ASSIGN_OR_RETURN(std::string metadata_id,
@@ -396,7 +396,7 @@ AudioLiteRtCompiledModelExecutor::AudioStreamingEncoder::Initialize() {
         /*check_and_clean=*/true);
     auto weight_cache_file = executor_settings_.GetWeightCacheFile(
         absl::StrCat(AudioExecutorSettings::kStreamingEncoderName,
-                     ExecutorSettingsBase::kMlDriftCacheSuffix),
+                     ExecutorSettingsBase::kMlDriftWeightCacheSuffix),
         /*check_and_clean=*/true);
     RETURN_IF_ERROR(SetGpuOptions(executor_settings_, gpu_options));
     ASSIGN_OR_RETURN(std::string metadata_id,
@@ -602,7 +602,7 @@ absl::Status AudioLiteRtCompiledModelExecutor::AudioAdapter::Initialize() {
         /*check_and_clean=*/true);
     auto weight_cache_file = executor_settings_.GetWeightCacheFile(
         absl::StrCat(AudioExecutorSettings::kAdapterName,
-                     ExecutorSettingsBase::kMlDriftCacheSuffix),
+                     ExecutorSettingsBase::kMlDriftWeightCacheSuffix),
         /*check_and_clean=*/true);
     ASSIGN_OR_RETURN(std::string metadata_id,
                      GetFileCacheIdentifier(model_path));

@@ -252,7 +252,7 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionEncoder::Initialize() {
           /*check_and_clean=*/true);
       auto weight_cache_file = vision_executor_settings_.GetWeightCacheFile(
           absl::StrCat(VisionExecutorSettings::kEncoderName,
-                       ExecutorSettingsBase::kMlDriftCacheSuffix),
+                       ExecutorSettingsBase::kMlDriftWeightCacheSuffix),
           /*check_and_clean=*/true);
       RETURN_IF_ERROR(SetGpuOptions(vision_executor_settings_, gpu_options));
       RETURN_IF_ERROR(SetGpuCacheOptions(
@@ -339,7 +339,7 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionAdapter::Initialize() {
           /*check_and_clean=*/true);
       auto weight_cache_file = vision_executor_settings_.GetWeightCacheFile(
           absl::StrCat(VisionExecutorSettings::kAdapterName,
-                       ExecutorSettingsBase::kMlDriftCacheSuffix),
+                       ExecutorSettingsBase::kMlDriftWeightCacheSuffix),
           /*check_and_clean=*/true);
       ASSIGN_OR_RETURN(std::string metadata_id,
                        GetFileCacheIdentifier(model_path));
