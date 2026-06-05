@@ -60,6 +60,7 @@ fun benchmark(
   prefillTokens: Int = 256,
   decodeTokens: Int = 256,
   cacheDir: String? = null,
+  prompt: String = "Engine ignore this message in this mode.",
 ): BenchmarkInfo {
   val enginePointer =
     LiteRtLmJni.nativeCreateBenchmark(
@@ -89,7 +90,7 @@ fun benchmark(
       )
 
     Conversation(conversationHandle).use { conversation ->
-      val unused = conversation.sendMessage("Engine ignore this message in this mode.")
+      val unused = conversation.sendMessage(prompt)
       return conversation.getBenchmarkInfo()
     }
   } finally {
