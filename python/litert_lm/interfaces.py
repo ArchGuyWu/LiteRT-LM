@@ -60,30 +60,33 @@ class NPU(Backend):
     litert_dispatch_lib_dir: The directory containing LiteRT dispatch libs.
   """
 
-  def __init__(self):
+  def __init__(self, cpu_debug: bool = False):
     """Initializes the NPU backend."""
     self.litert_dispatch_lib_dir = ""
-    if sys.platform == "win32":
-      try:
-        import openvino as ov  # pylint: disable=g-import-not-at-top  # pytype: disable=import-error
+    if not cpu_debug:
+      if sys.platform == "win32":
+        try:
+          import openvino as ov  # pylint: disable=g-import-not-at-top  # pytype: disable=import-error
 
-        if "NPU" in ov.Core().available_devices:
-          self.litert_dispatch_lib_dir = str(
-              resources.files(__package__) / "vendors/intel_openvino/dispatch/"
-          )
+          if "NPU" in ov.Core().available_devices:
+            self.litert_dispatch_lib_dir = str(
+                resources.files(__package__)
+                / "vendors/intel_openvino/dispatch/"
+            )
 
-          # openvino package place the NPU libs in "libs".
-          # Includes to PATH so Windows can load it.
-          libs_dir = os.path.join(os.path.dirname(ov.__file__), "libs")
-          os.environ["PATH"] = os.environ["PATH"] + ";" + libs_dir
-      except ImportError:
-        pass
+            # openvino package place the NPU libs in "libs".
+            # Includes to PATH so Windows can load it.
+            libs_dir = os.path.join(os.path.dirname(ov.__file__), "libs")
+            os.environ["PATH"] = os.environ["PATH"] + ";" + libs_dir
+        except ImportError:
+          pass
 
-    if not self.litert_dispatch_lib_dir:
-      raise RuntimeError(
-          "NPU is supported only for Intel OpenVINO on Windows. It is expected"
-          " to install the 'openvino' package and have an NPU available."
-      )
+      if not self.litert_dispatch_lib_dir:
+        raise RuntimeError(
+            "NPU is supported only for Intel OpenVINO on Windows. It is"
+            " expected to install the 'openvino' package and have an NPU"
+            " available."
+        )
 
 
 Backend.CPU = CPU
