@@ -1,0 +1,257 @@
+# Copyright 2026 The ODML Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Build Android AArch64 Python Wheels (Bazel)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'release/**'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: 'Git tag, branch, or commit to build (e.g. v0.8.0, main)'
+        required: true
+        default: 'main'
+        type: string
+      python_versions:
+        description: 'Python version(s) to build (e.g., 3.12 or comma-separated list like 3.10,3.11,3.12)'
+        required: true
+        default: '3.10,3.11,3.12,3.13,3.14'
+        type: string
+      is_nightly:
+        description: 'Whether to build the nightly package (sets DEV_BUILD=1)'
+        required: true
+        default: false
+        type: boolean
+      publish_to_pypi:
+        description: 'Publish wheels to PyPI'
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  setup:
+    name: Setup Build Matrix & Ref
+    runs-on: ubuntu-latest
+    outputs:
+      python-matrix: ${{ steps.set-matrix.outputs.python-matrix }}
+      first-python-version: ${{ steps.set-matrix.outputs.first-python-version }}
+      git-ref: ${{ steps.set-ref.outputs.git-ref }}
+    steps:
+      - id: set-matrix
+        run: |
+          # Default python versions for automatic triggers
+          INPUT_VERSIONS="3.10,3.11,3.12,3.13,3.14"
+          
+          # Override if manually triggered
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ github.event.inputs.python_versions }}" ]; then
+              INPUT_VERSIONS="${{ github.event.inputs.python_versions }}"
+            fi
+          fi
+          
+          # Convert comma-separated string to JSON array dynamically using jq
+          JSON_ARRAY=$(echo "$INPUT_VERSIONS" | jq -c -R 'split(",")')
+          echo "python-matrix=${JSON_ARRAY}" >> $GITHUB_OUTPUT
+          
+          # Dynamically determine the first version to build CLI & Builder once
+          FIRST_VERSION=$(echo "$JSON_ARRAY" | jq -r '.[0]')
+          echo "first-python-version=${FIRST_VERSION}" >> $GITHUB_OUTPUT
+          
+      - id: set-ref
+        run: |
+          # Default to current triggering ref
+          GIT_REF="${{ github.ref }}"
+          
+          # Override if manually triggered
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ github.event.inputs.git_ref }}" ]; then
+              GIT_REF="${{ github.event.inputs.git_ref }}"
+            fi
+          fi
+          echo "git-ref=${GIT_REF}" >> $GITHUB_OUTPUT
+
+  build-android-wheels:
+    name: "Build Android AArch64 Wheels - Py ${{ matrix.python-version }}"
+    needs: setup
+    runs-on: ubuntu-latest
+    env:
+      DEV_BUILD: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is_nightly == 'true') && '1' || '0' }}
+      PUBLISH_TO_PYPI: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to_pypi == 'true') && 'true' || 'false' }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJson(needs.setup.outputs.python-matrix) }}
+
+    steps:
+      # Step 1: Checkout the repository at the specified Git reference
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.git-ref }}
+          lfs: true
+          submodules: recursive
+
+      # Step 2: Setup Java JDK (Bazel requires Java to run)
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # Step 3: Setup Android NDK (r28b is standard for LiteRT-LM, r25c is also compatible)
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r28b
+          add-to-path: false
+
+      # Step 4: Setup Bazel with action cache
+      - name: Setup Bazel
+        uses: bazel-contrib/setup-bazel@v0.6.0
+        with:
+          disk-cache: true
+          repository-cache: true
+
+      # Step 5: Install uv package manager for fast Python toolchain management
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      # Step 6: Setup Python matching the matrix version
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Step 7: Cross-compile the Core API Library Python Wheel targeting Android AArch64
+      - name: Build Android AArch64 Python Wheel (Core API Library)
+        run: |
+          PYTHON_VERSION=${{ matrix.python-version }}
+          DATE=$(TZ=America/Los_Angeles date +'%Y%m%d')
+          
+          # Detect the build directory (handles subdirectory and root checkouts)
+          BUILD_DIR="."
+          if [ -d "LiteRT-LM" ]; then
+            BUILD_DIR="LiteRT-LM"
+          fi
+          
+          cd $BUILD_DIR
+          
+          # Detect the correct target path
+          TARGET=""
+          if [ -f "python/litert_lm/BUILD" ]; then
+            TARGET="//python/litert_lm:wheel"
+          elif [ -f "litert_lm/BUILD" ]; then
+            TARGET="//litert_lm:wheel"
+          else
+            echo "Error: Could not find litert_lm BUILD file!"
+            exit 1
+          fi
+          
+          echo "Building target ${TARGET} in directory $(pwd) for Python ${PYTHON_VERSION}"
+          
+          bazel build \
+            --repo_env=HERMETIC_PYTHON_VERSION=${PYTHON_VERSION} \
+            --@rules_python//python/config_settings:python_version=${PYTHON_VERSION} \
+            --define=DEV_BUILD=${{ env.DEV_BUILD }} \
+            --define=DEV_VERSION=${DATE} \
+            --define=litert_link_capi_so=true \
+            --define=resolve_symbols_in_exec=false \
+            --config=android_arm64 \
+            -c opt ${TARGET}
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      # Step 8: Build pure Python CLI and Builder Wheels (Built once on the first Python version in matrix)
+      - name: Build CLI & Builder Python Wheels
+        if: matrix.python-version == needs.setup.outputs.first-python-version
+        run: |
+          DATE=$(TZ=America/Los_Angeles date +'%Y%m%d')
+          
+          BUILD_DIR="."
+          if [ -d "LiteRT-LM" ]; then
+            BUILD_DIR="LiteRT-LM"
+          fi
+          
+          cd $BUILD_DIR
+          
+          # Detect CLI and Builder targets
+          CLI_TARGET=""
+          BUILDER_TARGET=""
+          
+          if [ -f "python/litert_lm_cli/BUILD" ]; then
+            CLI_TARGET="//python/litert_lm_cli:wheel"
+          elif [ -f "litert_lm_cli/BUILD" ]; then
+            CLI_TARGET="//litert_lm_cli:wheel"
+          fi
+          
+          if [ -f "python/litert_lm_builder/BUILD" ]; then
+            BUILDER_TARGET="//python/litert_lm_builder:wheel"
+          elif [ -f "litert_lm_builder/BUILD" ]; then
+            BUILDER_TARGET="//litert_lm_builder:wheel"
+          fi
+          
+          if [ -n "$CLI_TARGET" ]; then
+            echo "Building CLI wheel: ${CLI_TARGET}"
+            bazel build \
+              --define=DEV_BUILD=${{ env.DEV_BUILD }} \
+              --define=DEV_VERSION=${DATE} \
+              -c opt ${CLI_TARGET}
+          fi
+          
+          if [ -n "$BUILDER_TARGET" ]; then
+            echo "Building Builder wheel: ${BUILDER_TARGET}"
+            bazel build \
+              --define=DEV_BUILD=${{ env.DEV_BUILD }} \
+              --define=DEV_VERSION=${DATE} \
+              -c opt ${BUILDER_TARGET}
+          fi
+
+      # Step 9: Collect and stage all generated wheels
+      - name: Collect Wheels
+        run: |
+          BUILD_DIR="."
+          if [ -d "LiteRT-LM" ]; then
+            BUILD_DIR="LiteRT-LM"
+          fi
+          
+          mkdir -p dist/
+          find ${BUILD_DIR}/bazel-bin -name "*.whl" -exec cp {} dist/ \;
+          ls -lh dist/
+
+      # Step 10: Upload the compiled wheels to GitHub Actions artifacts
+      - name: Upload Wheels as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: litert-lm-wheels-android-aarch64-py${{ matrix.python-version }}
+          path: dist/*.whl
+
+      # Step 11: Publish package to PyPI (Runs only on workflow_dispatch with publish flag)
+      - name: Publish to PyPI
+        if: env.PUBLISH_TO_PYPI == 'true' && github.event_name == 'workflow_dispatch'
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_UPLOAD_TOKEN }}
+        run: |
+          find dist -name "*.whl" -exec uv publish {} \;
