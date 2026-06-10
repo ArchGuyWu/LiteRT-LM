@@ -36,7 +36,7 @@ on:
       python_versions:
         description: 'Python version(s) to build (e.g., 3.12 or comma-separated list like 3.10,3.11,3.12)'
         required: true
-        default: '3.10,3.11,3.12,3.13,3.14'
+        default: '3.13,3.14'
         type: string
       is_nightly:
         description: 'Whether to build the nightly package (sets DEV_BUILD=1)'
@@ -130,7 +130,7 @@ jobs:
 
       # Step 4: Setup Bazel with action cache
       - name: Setup Bazel
-        uses: bazel-contrib/setup-bazel@v0.6.0
+        uses: bazel-contrib/setup-bazel@0.19.0
         with:
           disk-cache: true
           repository-cache: true
