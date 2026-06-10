@@ -130,7 +130,7 @@ jobs:
 
       # Step 4: Setup Bazel with action cache
       - name: Setup Bazel
-        uses: bazel-contrib/setup-bazel@0.19.0
+        uses: bazel-contrib/setup-bazel@v0.6.0
         with:
           disk-cache: true
           repository-cache: true
@@ -232,14 +232,19 @@ jobs:
       # Step 9: Collect and stage all generated wheels
       - name: Collect Wheels
         run: |
+          mkdir -p dist/
+          
           BUILD_DIR="."
           if [ -d "LiteRT-LM" ]; then
             BUILD_DIR="LiteRT-LM"
           fi
           
-          mkdir -p dist/
-          find ${BUILD_DIR}/bazel-bin -name "*.whl" -exec cp {} dist/ \;
-          ls -lh dist/
+          echo "Searching for wheels in ${BUILD_DIR}..."
+          # Use find -L to follow symbolic links of bazel-bin
+          find -L "${BUILD_DIR}" -name "*.whl" -not -path "*/.venv/*" -not -path "*/venv/*" -exec cp -v {} dist/ \;
+          
+          echo "Collected wheels:"
+          ls -la dist/
 
       # Step 10: Upload the compiled wheels to GitHub Actions artifacts
       - name: Upload Wheels as Artifacts
